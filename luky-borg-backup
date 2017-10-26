@@ -7,6 +7,21 @@ if [ -z "$REPOSITORY" ]; then
     exit
 fi
 
+notify() {
+    echo $(echo $1|tr '[:lower:]' '[:upper:]'): $2
+    if [ "$(command -v sudo)" -a "$(command -v notify-send)" ]; then
+        dialog_kind=$(echo $1|tr '[:upper:]' '[:lower:]')
+        if [ $dialog_kind == 'info' ]; then
+            dialog_kind='information'
+        fi
+        for u in $(users); do
+            sudo -u $u DISPLAY=:0 \
+            DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(sudo -u $u id -u)/bus \
+            notify-send -a 'luky-borg-backup' "$1" "$2" --icon=dialog-$dialog_kind
+        done
+    fi
+}
+
 # Try to mount the MOUNTPOINT first (if one exists)
 premounted="1" # assume all mounts were already in place before we started
 mounted="1" # assume a mounted state until proven otherwise
@@ -22,7 +37,7 @@ if [ ! -z "$MOUNTPOINT" ]; then
         echo "Mounting $MOUNTPOINT..."
         mount "$MOUNTPOINT"
         if [ "$?" -ne "0" ]; then
-            echo "ERROR: $MOUNTPOINT could not be mounted!"
+            notify Error "$MOUNTPOINT could not be mounted!"
         else
             echo " Mounted $MOUNTPOINT!"
             mounted="1"
@@ -34,9 +49,9 @@ if [ "$mounted" -eq "1" ]; then
     # Backup all necessary files and directories using deduplication and lz4 conpression
 
     echo
-    echo "Backing up to $REPOSITORY..."
+    notify Info "Backing up to $REPOSITORY..."
     borg create -v -s --noatime -C lz4 $REPOSITORY::'{hostname}-{now:%Y-%m-%dT%H:%M:%S.%f}' $SOURCES
-    echo " Backed up to $REPOSITORY!"
+    notify Info " Backed up to $REPOSITORY!"
     echo
 
     # Use the `prune` subcommand to maintain 7 daily, 4 weekly, 12 monthly and
